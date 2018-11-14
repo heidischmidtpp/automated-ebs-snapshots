@@ -116,6 +116,20 @@ register_data_volume () {
 	python ${python_esb_script} --watch ${DATA_VOL_ID} --interval daily
 }
 
+do_relay_check () {
+	if [ -e ${RELAY_FILE} ]
+	then
+		echo "Replica Relay Log File exists: "
+		ls -ltra ${RELAY_FILE}
+		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Proceeding with snapshot backup for data volume ${DATA_VOL_ID}. The file ${RELAY_FILE} exists and ${HOSTNAME} is a replica\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		echo "Proceeding with EBS snapshot for ${HOSTNAME}"
+	else
+		echo "${RELAY_FILE} does not exist. This server ${HOSTNAME} is a main, not a replica. Exiting"
+		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"This is a Main MySQL db server. The replication file ${RELAY_FILE} does not exist for ${HOSTNAME} and we DON'T want a db shutdown to create a quiesced filesystem snapshot\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		exit 0
+	fi
+} 
+
 do_drain_db () {
 	#########################################
 	# Tell mysql that we need to shutdown so start flushing dirty pages to disk.
@@ -145,19 +159,6 @@ do_db_shutdown () {
 	# DO NOT PROCEED WITH DB SHUTDOWN !!! 
 	#
 	#########################################
-
-
-	if [ -e ${RELAY_FILE} ]
-	then
-		echo "Replica Relay Log File exists: "
-		ls -ltra ${RELAY_FILE}
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Proceeding with snapshot backup for data volume ${DATA_VOL_ID}. The file ${RELAY_FILE} exists and ${HOSTNAME} is a replica\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
-		echo "Proceeding with EBS snapshot for ${HOSTNAME}"
-	else
-		echo "${RELAY_FILE} does not exist. This server ${HOSTNAME} is a main, not a replica. Exiting"
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"This is a Main MySQL db server. The replication file ${RELAY_FILE} does not exist for ${HOSTNAME} and we DON'T want a db shutdown to create a quiesced filesystem snapshot\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
-		exit 0
-	fi
 
 	echo "DB Shutdown & EBS Snapshot after flushing Innodb dirty pages : "
 	if [ ${SNAPSHOT_LOG} -nt ${DRAIN_FILE} ]; then
@@ -276,9 +277,11 @@ do_replication_check () {
 option="${1}" 
 case ${option} in 
 '--drain_db') 
+	do_relay_check
 	do_drain_db
 ;; 
 '--db_shutdown') 
+	do_relay_check
 	do_drain_db
 	do_db_shutdown 
 	do_db_restart 
@@ -287,6 +290,7 @@ case ${option} in
 	do_db_restart 
 ;;
 '--check_repl_status')
+	do_relay_check
 	do_replication_check 
 ;;
 *)
