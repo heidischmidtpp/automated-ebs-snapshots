@@ -1,6 +1,8 @@
 """ Module handling the snapshots """
+import boto
 import logging
 import datetime
+import re
 
 from boto.exception import EC2ResponseError
 
@@ -23,6 +25,20 @@ def run(connection):
         _ensure_snapshot(connection, volume)
         _remove_old_snapshots(connection, volume)
 
+def run_one_vol(connection,volume_id):
+    """ Ensure that we have snapshots for a given volume
+
+    :type connection: boto.ec2.connection.EC2Connection
+    :param connection: EC2 connection object
+    :type volume_id: str
+    :param volume_id: Volume ID to be passed for a single snapshot
+    :returns: None
+    """
+    volume = connection.get_all_volumes(volume_ids=[volume_id])[0]
+
+    _ensure_snapshot(connection, volume)
+    _remove_old_snapshots(connection, volume)
+    
 
 def _create_snapshot(volume):
     """ Create a new snapshot
@@ -31,14 +47,40 @@ def _create_snapshot(volume):
     :param volume: Volume to snapshot
     :returns: boto.ec2.snapshot.Snapshot -- The new snapshot
     """
+
+    LOG_FILENAME = '/tmp/example.log'
+    logging.basicConfig(filename=LOG_FILENAME,level=logging.INFO)
+
+    logging.info('This message should go to the log file')
+    
     logger.info('Creating new snapshot for {}'.format(volume.id))
     snapshot = volume.create_snapshot(
         description="Automatic snapshot by Automated EBS Snapshots")
-    logger.info('Created snapshot {} for volume {}'.format(
-        snapshot.id, volume.id))
+    logger.info('Created snapshot {} for volume {}'.format(snapshot.id, volume.id))
+
+    # example use of create_tags(resource_ids, tags, dry_run=False)
+    now = datetime.datetime.now()
+    snapshot_tagtime = now.strftime("%Y-%m-%d_%H%M%s")
+    snapshot_tagname = ("mysql-snapshot" + "_" + volume.id + "_" + str(snapshot_tagtime))
+    ec2 = boto.connect_ec2()
+    ec2.create_tags([snapshot.id], {"Name": snapshot_tagname })
+
+    filename ="/db1/mysql/log/ebs-snapshot-db1.log"
+
+    with open(filename) as f:
+        lines = f.read().splitlines()
+
+    for line in lines:
+        if re.search(' Master_Log_File', line):
+             positions = line.split(":")
+             print "Master_Log_File value" + positions[1],
+             ec2.create_tags([snapshot.id], {"Master_Log_File": positions[1] })
+        if re.search(' Read_Master_Log_Pos',line):
+             positions = line.split(":")
+             print "Read_Master_Log_Pos value" + positions[1],
+             ec2.create_tags([snapshot.id], {"Read_Master_Log_Pos": positions[1] })
 
     return snapshot
-
 
 def _ensure_snapshot(connection, volume):
     """ Ensure that a given volume has an appropriate snapshot

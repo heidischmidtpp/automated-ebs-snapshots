@@ -169,3 +169,6 @@ def main():
 
     if args.run:
         snapshot_manager.run(connection)
+
+    if args.run_one_vol:
+        snapshot_manager.run_one_vol(connection, args.run_one_vol)

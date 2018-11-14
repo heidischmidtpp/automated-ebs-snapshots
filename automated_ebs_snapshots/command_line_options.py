@@ -97,6 +97,11 @@ actions_ag.add_argument(
     '--run',
     action='count',
     help='Run the watcher to ensure snapshots')
+actions_ag.add_argument(
+    '--run_one_vol',
+    metavar='VOLUME_ID',
+    help=('Run the watcher to ensure one snapshot'
+          'Usage: --run_one_vol vol-12345678'))
 args = parser.parse_args()
 
 if args.version:
