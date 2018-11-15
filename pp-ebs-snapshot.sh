@@ -116,6 +116,10 @@ register_data_volume () {
 	python ${python_esb_script} --watch ${DATA_VOL_ID} --interval daily
 }
 
+do_snapshot_only () {
+	python ${python_esb_script} --run_one_vol ${DATA_VOL_ID}
+}
+
 do_relay_check () {
 	if [ -e ${RELAY_FILE} ]
 	then
@@ -293,6 +297,9 @@ case ${option} in
 	do_relay_check
 	do_replication_check 
 ;;
+'--snapshot_only')
+	do_snapshot_only 
+;;
 *)
 	echo "For script ${filename} : "
         echo "Usage: ${filename} [--drain_db ] | [--db_shutdown ] | [--restart_db ] | [--check_repl_status ]" 
@@ -300,6 +307,7 @@ case ${option} in
 	echo "		--db_shutdown 	    - Waits until the dirty buffers and pages are at 0 before stopping db, issuing fs freeze, then snapshot and unfreeze; then restarts db and replication."
 	echo "		--restart_db 	    - Starts up mysql db and restarts replication"
 	echo "		--check_repl_status - Starts up mysql db and restarts replication, if both are not already started"
+	echo "		--snapshot_only     - Take a snapshot of the volume with NO quiescing of db or filesystem."
 	exit 1 # Command to come out of the program with status 1
 ;; 
 esac 
