@@ -56,7 +56,7 @@ REPLICATION_START_LOG="/files/scripts/replication_start.log"
 		echo "Installing jq on server ${HOSTNAME} for script ${filename} dependencies"
 		yum install -y jq 
         else 
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"FAILURE: JQ not installed ${HOSTNAME}.\" -t "automated-ebs-snapshot" }" 2>> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"FAILURE: JQ not installed ${HOSTNAME}.\"  }" 2>> ${SNAPSHOT_LOG}
 		
 	fi
 
@@ -64,7 +64,7 @@ REPLICATION_START_LOG="/files/scripts/replication_start.log"
 	then 
 		echo "No MySQL EBS data volume defined for the host. Exiting"
 		echo "The command failed to return the data volume id : aws ec2 --region us-east-1 describe-volumes --filters Name=attachment.instance-id,Values=`curl -s http://169.254.169.254/latest/meta-data/instance-id` Name=attachment.device,Values='/dev/xvdf' | jq '.Volumes[0].Attachments[0].VolumeId' | sed s/\"//g" 
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"FAILURE: AWS EC2 volume id not found.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"FAILURE: AWS EC2 volume id not found.\" }" >> ${SNAPSHOT_LOG}
 		exit
 	else 
 		echo "Registered the ${DATA_VOL_ID} with the Automated EBS Snapshot Python script"
@@ -116,20 +116,16 @@ register_data_volume () {
 	python ${python_esb_script} --watch ${DATA_VOL_ID} --interval daily
 }
 
-do_snapshot_only () {
-	python ${python_esb_script} --run_one_vol ${DATA_VOL_ID}
-}
-
 do_relay_check () {
 	if [ -e ${RELAY_FILE} ]
 	then
 		echo "Replica Relay Log File exists: "
 		ls -ltra ${RELAY_FILE}
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Proceeding with snapshot backup for data volume ${DATA_VOL_ID}. The file ${RELAY_FILE} exists and ${HOSTNAME} is a replica\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Proceeding with snapshot backup for data volume ${DATA_VOL_ID}. The file ${RELAY_FILE} exists and ${HOSTNAME} is a replica\" }"  >> ${SNAPSHOT_LOG}
 		echo "Proceeding with EBS snapshot for ${HOSTNAME}"
 	else
 		echo "${RELAY_FILE} does not exist. This server ${HOSTNAME} is a main, not a replica. Exiting"
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"This is a Main MySQL db server. The replication file ${RELAY_FILE} does not exist for ${HOSTNAME} and we DON'T want a db shutdown to create a quiesced filesystem snapshot\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"This is a Main MySQL db server. The replication file ${RELAY_FILE} does not exist for ${HOSTNAME} and we DON'T want a db shutdown to create a quiesced filesystem snapshot\" }"  >> ${SNAPSHOT_LOG}
 		exit 0
 	fi
 } 
@@ -151,8 +147,7 @@ do_drain_db () {
 	touch ${DRAIN_FILE}
         sleep 5
 	rcall ${mysql_login_path} -vvv < ${DRAIN_SQL} > ${BINLOG_COORDS_FILE} 
-	logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Replication stopped on ${HOSTNAME} and temp global settings for buffers set.\" }" -t
-"automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+	echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Replication stopped on ${HOSTNAME} and temp global settings for buffers set.\" }" >> ${SNAPSHOT_LOG}
 }
 
 do_db_shutdown () {
@@ -172,26 +167,26 @@ do_db_shutdown () {
 			Innodb_buffer_pool_bytes_dirty=$(echo $status | grep Innodb_buffer_pool_bytes_dirty | awk '{ print $4 }')
 			if [ ${Innodb_buffer_pool_pages_dirty} == "0" ] && [ ${Innodb_buffer_pool_bytes_dirty} == "0" ]; then
 				echo "Modified db pages at 0 on `date` " >> ${BINLOG_COORDS_FILE}
-				logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Replication stopped and innodb dirty buffers at 0 for db on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot"  2>> ${SNAPSHOT_LOG}
+				echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Replication stopped and innodb dirty buffers at 0 for db on ${HOSTNAME}.\" }"   >> ${SNAPSHOT_LOG}
 				service mysqld stop
 				wait 
-				logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Stopping db on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+				echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Stopping db on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
 				sync 
-				logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Freezing MySQL data filesystem on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+				echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Freezing MySQL data filesystem on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
 				fsfreeze -f /db1
 				python ${python_esb_script} --run_one_vol ${DATA_VOL_ID}
-				logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Snapshot created for ${DATA_VOL_ID} on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+				echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Snapshot created for ${DATA_VOL_ID} on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
 				fsfreeze -u /db1
-				logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Un-Freezing MySQL data filesystem on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+				echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Un-Freezing MySQL data filesystem on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
 				break
 			fi
 			echo -ne "${status}\r";
 			sleep 1
 		done
-		Master_Log_File=$(grep "Master_Log_File:" ${BINLOG_COORDS_FILE} | awk '{ print $2 }')
-		Read_Master_Log_Pos=$(grep "Read_Master_Log_Pos:" ${BINLOG_COORDS_FILE} | awk '{ print $2 }')
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Binary log positions at time of snapshot -- Master_Log_File position: ${Master_Log_File} and Read_Master_Log_Pos position: ${Read_Master_Log_Pos} for ${DATA_VOL_ID} on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Completed snapshot backup for data volume ${DATA_VOL_ID} on ${HOSTNAME}. \" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		Master_Log_File=$(grep " Master_Log_File:" ${BINLOG_COORDS_FILE} | awk '{ print $2 }')
+		Read_Master_Log_Pos=$(grep " Read_Master_Log_Pos:" ${BINLOG_COORDS_FILE} | awk '{ print $2 }')
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Binary log positions Master_Log_File position: ${Master_Log_File} and Read_Master_Log_Pos position: ${Read_Master_Log_Pos} for ${DATA_VOL_ID} on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Completed snapshot backup for data volume ${DATA_VOL_ID} on ${HOSTNAME}. \" }"  >> ${SNAPSHOT_LOG}
 	fi
 }
 
@@ -214,7 +209,7 @@ do_db_restart () {
             	rcall ${mysql_login_path} -vvv < ${REPLICATION_START_SQL} > ${REPLICATION_START_LOG} 
 		echo "Replication status : "
 		echo "====================="
-		logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Restarting MySQL Replication on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Restarting MySQL Replication on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
 	    	rcall ${mysql_login_path} -vvv < ${REPLICATION_STATUS_SQL} > ${REPLICATION_STATUS_FILE} 
 	    	Slave_IO_Running=$(grep "Slave_IO_Running:" ${REPLICATION_STATUS_FILE} | awk '{ print $2 }')
 	    	Slave_SQL_Running=$(grep "Slave_SQL_Running:" ${REPLICATION_STATUS_FILE} | awk '{ print $2 }')
@@ -251,7 +246,7 @@ do_replication_check () {
 	    echo "Slave_IO_Running: is  ${Slave_IO_Running}  on ${HOSTNAME} !!!"
 	    echo "Slave_SQL_Running: is  ${Slave_SQL_Running}  on ${HOSTNAME} !!!"
             echo "Starting replication ====================================="
-	    logger -s "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Restarting MySQL Replication on ${HOSTNAME}.\" }" -t "automated-ebs-snapshot" 2>> ${SNAPSHOT_LOG}
+	    echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"Restarting MySQL Replication on ${HOSTNAME}.\" }"  >> ${SNAPSHOT_LOG}
             rcall ${mysql_login_path} -vvv < ${REPLICATION_START_SQL} > ${REPLICATION_START_LOG} 
 	    sleep 5
 	    rcall ${mysql_login_path} -vvv < ${REPLICATION_STATUS_SQL} > ${REPLICATION_STATUS_FILE} 
@@ -297,9 +292,6 @@ case ${option} in
 	do_relay_check
 	do_replication_check 
 ;;
-'--snapshot_only')
-	do_snapshot_only 
-;;
 *)
 	echo "For script ${filename} : "
         echo "Usage: ${filename} [--drain_db ] | [--db_shutdown ] | [--restart_db ] | [--check_repl_status ]" 
@@ -307,7 +299,6 @@ case ${option} in
 	echo "		--db_shutdown 	    - Waits until the dirty buffers and pages are at 0 before stopping db, issuing fs freeze, then snapshot and unfreeze; then restarts db and replication."
 	echo "		--restart_db 	    - Starts up mysql db and restarts replication"
 	echo "		--check_repl_status - Starts up mysql db and restarts replication, if both are not already started"
-	echo "		--snapshot_only     - Take a snapshot of the volume with NO quiescing of db or filesystem."
 	exit 1 # Command to come out of the program with status 1
 ;; 
 esac 
