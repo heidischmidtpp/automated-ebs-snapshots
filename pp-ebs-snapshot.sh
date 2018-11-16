@@ -116,6 +116,10 @@ register_data_volume () {
 	python ${python_esb_script} --watch ${DATA_VOL_ID} --interval daily
 }
 
+do_snapshot_only () {
+        python ${python_esb_script} --run_one_vol ${DATA_VOL_ID}
+}
+
 do_relay_check () {
 	if [ -e ${RELAY_FILE} ]
 	then
@@ -291,6 +295,9 @@ case ${option} in
 '--check_repl_status')
 	do_relay_check
 	do_replication_check 
+;;
+'--snapshot_only')
+        do_snapshot_only
 ;;
 *)
 	echo "For script ${filename} : "
