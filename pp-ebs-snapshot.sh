@@ -56,7 +56,7 @@ REPLICATION_START_LOG="/files/scripts/replication_start.log"
 		echo "Installing jq on server ${HOSTNAME} for script ${filename} dependencies"
 		yum install -y jq 
         else 
-		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"FAILURE: JQ not installed ${HOSTNAME}.\"  }" 2>> ${SNAPSHOT_LOG}
+		echo  "{ \"date\":\"$(date)\", \"script\":\"${filename}\", \"status\":\"${HOSTNAME}.\"  }" 2>> ${SNAPSHOT_LOG}
 		
 	fi
 
