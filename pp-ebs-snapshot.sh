@@ -68,7 +68,7 @@ REPLICATION_START_LOG="/files/scripts/replication_start.log"
 		exit
 	else 
 		echo "Registered the ${DATA_VOL_ID} with the Automated EBS Snapshot Python script"
-		python ${python_esb_script} --watch ${DATA_VOL_ID} --interval hourly --retention 7
+		python ${python_esb_script} --watch ${DATA_VOL_ID} --interval hourly --retention 168
 		echo "MySQL data volume ${DATA_VOL_ID} is registered" 
 	fi 
 
@@ -113,7 +113,7 @@ register_data_volume () {
 	#  If there are no volumes to watch, find it  
 	#  and watch it aka register it with python script 
 	#########################################
-	python ${python_esb_script} --watch ${DATA_VOL_ID} --interval daily
+	python ${python_esb_script} --watch ${DATA_VOL_ID} --interval hourly --retention 168 
 }
 
 do_snapshot_only () {
@@ -301,14 +301,15 @@ case ${option} in
 ;;
 *)
 	echo "For script ${filename} : "
-        echo "Usage: ${filename} [--drain_db ] | [--db_shutdown ] | [--restart_db ] | [--check_repl_status ]" 
+        echo "Usage: ${filename} [--drain_db ] | [--db_shutdown ] | [--restart_db ] | [--check_repl_status ] [--snapshot_only]" 
 	echo "		--drain_db          - Stops Replication, notes binlog positions, and sets temporarily the pct dirty buffers to 0 to allow innodb pages to flush to disk."
 	echo "		--db_shutdown 	    - Waits until the dirty buffers and pages are at 0 before stopping db, issuing fs freeze, then snapshot and unfreeze; then restarts db and replication."
 	echo "		--restart_db 	    - Starts up mysql db and restarts replication"
 	echo "		--check_repl_status - Starts up mysql db and restarts replication, if both are not already started"
+        echo "		--snapshot_only     - Take a snapshot of the volume with NO quiescing of db or filesystem."
 	exit 1 # Command to come out of the program with status 1
 ;; 
 esac 
  
-# Add binary log positions to the gray log 
-# Add binary log positions to the snapshot tag 
+# Add binary log positions to the gray log (done)
+# Add binary log positions to the snapshot tag (done)
